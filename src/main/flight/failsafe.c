@@ -320,7 +320,12 @@ FAST_CODE_NOINLINE void failsafeUpdateState(void)
                 if (armed) {
                     // Track throttle command below minimum time
                     if (calculateThrottleStatus() != THROTTLE_LOW) {
+                        // CUSTOM: throttle_low_delay = 0 means infinite (never JustDisarm)
+                    if (failsafeConfig()->failsafe_throttle_low_delay > 0) {
                         failsafeState.throttleLowPeriod = millis() + failsafeConfig()->failsafe_throttle_low_delay * MILLIS_PER_TENTH_SECOND;
+                    } else {
+                        failsafeState.throttleLowPeriod = UINT32_MAX;
+                    }
                     }
                     if (failsafeState.boxFailsafeSwitchWasOn && (failsafeConfig()->failsafe_switch_mode == FAILSAFE_SWITCH_MODE_KILL)) {
                         // Failsafe switch is configured as KILL switch and is switched ON
@@ -516,7 +521,12 @@ FAST_CODE_NOINLINE void failsafeUpdateState(void)
 
             case FAILSAFE_RX_LOSS_RECOVERED:
                 // Entering IDLE, terminating failsafe, reset throttle low timer
-                failsafeState.throttleLowPeriod = millis() + failsafeConfig()->failsafe_throttle_low_delay * MILLIS_PER_TENTH_SECOND;
+                // CUSTOM: throttle_low_delay = 0 means infinite (never JustDisarm)
+                    if (failsafeConfig()->failsafe_throttle_low_delay > 0) {
+                        failsafeState.throttleLowPeriod = millis() + failsafeConfig()->failsafe_throttle_low_delay * MILLIS_PER_TENTH_SECOND;
+                    } else {
+                        failsafeState.throttleLowPeriod = UINT32_MAX;
+                    }
                 failsafeState.phase = FAILSAFE_IDLE;
                 failsafeState.active = false;
 #ifdef USE_GPS_RESCUE
