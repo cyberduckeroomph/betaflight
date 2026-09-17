@@ -244,7 +244,12 @@ static void failsafeStartProcedure(failsafeProcedure_e procedure)
             //  Enter Stage 2 with settings for landing mode
             ENABLE_FLIGHT_MODE(FAILSAFE_MODE);
             failsafeState.phase = FAILSAFE_LANDING;
-            failsafeState.landingShouldBeFinishedAt = millis() + failsafeConfig()->failsafe_landing_time * MILLIS_PER_SECOND;
+            // CUSTOM: landing_time = 0 means infinite (never disarm by timeout)
+            if (failsafeConfig()->failsafe_landing_time > 0) {
+                failsafeState.landingShouldBeFinishedAt = millis() + failsafeConfig()->failsafe_landing_time * MILLIS_PER_SECOND;
+            } else {
+                failsafeState.landingShouldBeFinishedAt = UINT32_MAX;
+            }
             break;
 
         case FAILSAFE_PROCEDURE_DROP_IT:
