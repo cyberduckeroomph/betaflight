@@ -244,7 +244,12 @@ static void failsafeStartProcedure(failsafeProcedure_e procedure)
             //  Enter Stage 2 with settings for landing mode
             ENABLE_FLIGHT_MODE(FAILSAFE_MODE);
             failsafeState.phase = FAILSAFE_LANDING;
-            failsafeState.landingShouldBeFinishedAt = millis() + failsafeConfig()->failsafe_landing_time * MILLIS_PER_SECOND;
+            // CUSTOM: landing_time = 0 means infinite (never disarm by timeout)
+            if (failsafeConfig()->failsafe_landing_time > 0) {
+                failsafeState.landingShouldBeFinishedAt = millis() + failsafeConfig()->failsafe_landing_time * MILLIS_PER_SECOND;
+            } else {
+                failsafeState.landingShouldBeFinishedAt = UINT32_MAX;
+            }
             break;
 
         case FAILSAFE_PROCEDURE_DROP_IT:
@@ -327,25 +332,14 @@ FAST_CODE_NOINLINE void failsafeUpdateState(void)
                         failsafeState.receivingRxDataPeriodPreset = failsafeState.rxDataRecoveryPeriod;
                         //  allow re-arming 1 second after Rx recovery, customisable
                         reprocessState = true;
-                    } else if (!receivingRxData) {
-                        if (millis() > failsafeState.throttleLowPeriod
-#ifdef USE_GPS_RESCUE
-                            && failsafeConfig()->failsafe_procedure != FAILSAFE_PROCEDURE_GPS_RESCUE
-#endif
-                            ) {
-                            //  JustDisarm if throttle was LOW for at least 'failsafe_throttle_low_delay' before failsafe
-                            //  protects against false arming when the Tx is powered up after the quad
-                            failsafeState.active = true;
-                            failsafeState.events++;
-                            ENABLE_FLIGHT_MODE(FAILSAFE_MODE);
-                            failsafeState.phase = FAILSAFE_LANDED;
-                            //  go directly to FAILSAFE_LANDED
-                            failsafeState.receivingRxDataPeriodPreset = failsafeState.rxDataRecoveryPeriod;
-                            //  allow re-arming 1 second after Rx recovery, customisable
-                        } else {
+                                        } else if (!receivingRxData) {
+                        // CUSTOM v4: no Stage 1 delay, no JustDisarm
+                        if (!IS_RC_MODE_ACTIVE(BOXUSER1)) {
+                            // USER1 OFF → immediate Stage 2 (AUTO-LAND)
                             failsafeState.phase = FAILSAFE_RX_LOSS_DETECTED;
+                            reprocessState = true;
                         }
-                        reprocessState = true;
+                        // USER1 ON → HOLD: stay in IDLE, channels frozen by rxfail
                     }
                 } else {
                     // When NOT armed, enable failsafe mode to show warnings in OSD
