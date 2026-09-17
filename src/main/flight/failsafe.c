@@ -352,10 +352,13 @@ FAST_CODE_NOINLINE void failsafeUpdateState(void)
                             //  go directly to FAILSAFE_LANDED
                             failsafeState.receivingRxDataPeriodPreset = failsafeState.rxDataRecoveryPeriod;
                             //  allow re-arming 1 second after Rx recovery, customisable
-                        } else {
+                            reprocessState = true;
+                        } else if (!IS_RC_MODE_ACTIVE(BOXUSER1)) {
+                            // CUSTOM: USER1 OFF → enter Stage 2 (AUTO-LAND)
                             failsafeState.phase = FAILSAFE_RX_LOSS_DETECTED;
+                            reprocessState = true;
                         }
-                        reprocessState = true;
+                        // CUSTOM: USER1 ON → stay in Stage 1 HOLD, don't reprocess
                     }
                 } else {
                     // When NOT armed, enable failsafe mode to show warnings in OSD

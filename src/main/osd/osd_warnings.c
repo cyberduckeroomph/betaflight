@@ -530,6 +530,14 @@ void renderOsdWarning(char *warningText, bool *blinking, uint8_t *displayAttr)
     }
 #endif // USE_CHIRP
 
+    // CUSTOM: show selected failsafe mode (USER1 tumbler position)
+    if (IS_RC_MODE_ACTIVE(BOXUSER1)) {
+        tfp_sprintf(warningText, "FS:HOLD");
+    } else {
+        tfp_sprintf(warningText, "FS:HOVER");
+    }
+    *displayAttr = DISPLAYPORT_SEVERITY_INFO;
+
 }
 
 #endif // USE_OSD
