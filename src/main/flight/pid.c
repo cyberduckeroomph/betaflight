@@ -46,6 +46,7 @@
 #include "fc/runtime_config.h"
 
 #include "flight/autopilot.h"
+#include "flight/failsafe.h"
 #include "flight/gps_rescue.h"
 #include "flight/imu.h"
 #include "flight/mixer.h"
@@ -1186,6 +1187,11 @@ void FAST_CODE pidController(const pidProfile_t *pidProfile, timeUs_t currentTim
 #endif // USE_CHIRP
 
         float currentPidSetpoint = getSetpointRate(axis);
+        if ((failsafePhase() != FAILSAFE_IDLE) && failsafeUser1Selected()) {
+            if (axis < FD_YAW) {
+                currentPidSetpoint = 0.0f;
+            }
+        }
         if (pidRuntime.maxVelocity[axis]) {
             currentPidSetpoint = accelerationLimit(axis, currentPidSetpoint);
         }

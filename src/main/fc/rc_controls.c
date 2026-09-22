@@ -199,7 +199,8 @@ void processRcStickPositions(void)
                 }
             }
         }
-    } else if (rcSticks == THR_LO + YAW_LO + PIT_CE + ROL_CE) {
+    } else if (rcSticks == THR_LO + YAW_LO + PIT_CE + ROL_CE
+        && !(failsafeUser1ProcedureEnabled() && !rxAreFlightChannelsValid())) {
         if (rcDelayMs >= ARM_DELAY_MS && !doNotRepeat) {
             doNotRepeat = true;
             // Disarm on throttle down + yaw

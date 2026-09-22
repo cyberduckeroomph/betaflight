@@ -66,7 +66,7 @@
 
 static failsafeState_t failsafeState;
 
-PG_REGISTER_WITH_RESET_TEMPLATE(failsafeConfig_t, failsafeConfig, PG_FAILSAFE_CONFIG, 2);
+PG_REGISTER_WITH_RESET_TEMPLATE(failsafeConfig_t, failsafeConfig, PG_FAILSAFE_CONFIG, 3);
 
 #ifdef USE_RACE_PRO
 #define DEFAULT_FAILSAFE_RECOVERY_DELAY 1            // 100ms of valid rx data needed to allow recovery from failsafe and arming block
@@ -86,7 +86,8 @@ PG_RESET_TEMPLATE(failsafeConfig_t, failsafeConfig,
     .failsafe_switch_mode = FAILSAFE_SWITCH_MODE_STAGE1, // default failsafe switch action is identical to rc link loss
     .failsafe_procedure = FAILSAFE_PROCEDURE_DROP_IT,    // default full failsafe procedure is 0: auto-landing
     .failsafe_recovery_delay = DEFAULT_FAILSAFE_RECOVERY_DELAY,
-    .failsafe_stick_threshold = 30                       // 30 percent of stick deflection to exit GPS Rescue procedure
+    .failsafe_stick_threshold = 30,                      // 30 percent of stick deflection to exit GPS Rescue procedure
+    .failsafe_user1_timeout = 600                       // 10 minutes before disarm in either USER1 procedure
 );
 
 const char * const failsafeProcedureNames[FAILSAFE_PROCEDURE_COUNT] = {
@@ -121,6 +122,8 @@ void failsafeReset(void)
     failsafeState.phase = FAILSAFE_IDLE;
     failsafeState.rxLinkState = FAILSAFE_RXLINK_DOWN;
     failsafeState.boxFailsafeSwitchWasOn = false;
+    failsafeState.user1ProcedureEnabled = false;
+    failsafeState.user1HoldSelected = false;
 #if ENABLE_RESCUE_PLAN
     failsafeState.autopilotEngageDeadline = 0;
 #endif
@@ -147,6 +150,24 @@ bool failsafeIsMonitoring(void)
 bool failsafeIsActive(void) // real or BOXFAILSAFE induced stage 2 failsafe is currently active
 {
     return failsafeState.active;
+}
+
+bool failsafeUser1ProcedureEnabled(void)
+{
+    return failsafeState.active &&
+           failsafeState.user1ProcedureEnabled &&
+           failsafeConfig()->failsafe_procedure == FAILSAFE_PROCEDURE_AUTO_LANDING;
+}
+
+bool failsafeUser1Selected(void)
+{
+    return failsafeState.user1ProcedureEnabled &&
+           failsafeConfig()->failsafe_procedure == FAILSAFE_PROCEDURE_AUTO_LANDING;
+}
+
+bool failsafeUser1HoldSelected(void)
+{
+    return failsafeUser1ProcedureEnabled() && failsafeState.user1HoldSelected;
 }
 
 void failsafeStartMonitoring(void)
@@ -240,12 +261,15 @@ LOCAL_UNUSED_FUNCTION static uint32_t failsafeFailurePeriodMs(void)
 static void failsafeStartProcedure(failsafeProcedure_e procedure)
 {
     switch (procedure) {
-        case FAILSAFE_PROCEDURE_AUTO_LANDING:
-            //  Enter Stage 2 with settings for landing mode
-            ENABLE_FLIGHT_MODE(FAILSAFE_MODE);
-            failsafeState.phase = FAILSAFE_LANDING;
-            failsafeState.landingShouldBeFinishedAt = millis() + failsafeConfig()->failsafe_landing_time * MILLIS_PER_SECOND;
+        case FAILSAFE_PROCEDURE_AUTO_LANDING: {
+             //  Enter Stage 2 with settings for landing mode
+             ENABLE_FLIGHT_MODE(FAILSAFE_MODE);
+             failsafeState.phase = FAILSAFE_LANDING;
+            const uint32_t landingSeconds = failsafeUser1ProcedureEnabled()
+                ? failsafeConfig()->failsafe_user1_timeout : failsafeConfig()->failsafe_landing_time;
+            failsafeState.landingShouldBeFinishedAt = millis() + landingSeconds * MILLIS_PER_SECOND;
             break;
+        }
 
         case FAILSAFE_PROCEDURE_DROP_IT:
         default:
@@ -310,6 +334,12 @@ FAST_CODE_NOINLINE void failsafeUpdateState(void)
 
         switch (failsafeState.phase) {
             case FAILSAFE_IDLE:
+                if (receivingRxData && rxAreFlightChannelsValid()) {
+                    // rxLinkState remains UP during Stage 1. Only refresh USER1
+                    // while the actual receiver channels are still valid.
+                    failsafeState.user1ProcedureEnabled = isModeActivationConditionPresent(BOXUSER1);
+                    failsafeState.user1HoldSelected = IS_RC_MODE_ACTIVE(BOXUSER1);
+                }
                 failsafeState.boxFailsafeSwitchWasOn = IS_RC_MODE_ACTIVE(BOXFAILSAFE);
                 // store and use the switch state as it was at the start of the failsafe
                 if (armed) {

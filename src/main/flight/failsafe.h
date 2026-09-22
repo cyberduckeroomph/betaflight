@@ -40,6 +40,7 @@ typedef struct failsafeConfig_s {
     uint8_t failsafe_procedure;             // selected full failsafe procedure is 0: auto-landing, 1: Drop it
     uint16_t failsafe_recovery_delay;       // Time (in 0.1sec) of valid rx data (min 100ms PERIOD_RXDATA_RECOVERY) to allow recovering from failsafe procedure
     uint8_t failsafe_stick_threshold;       // Stick deflection percentage to exit GPS Rescue procedure
+    uint16_t failsafe_user1_timeout;        // Seconds before disarm with either USER1-selected procedure.
 } failsafeConfig_t;
 
 PG_DECLARE(failsafeConfig_t, failsafeConfig);
@@ -92,6 +93,8 @@ typedef struct failsafeState_s {
     failsafePhase_e phase;
     failsafeRxLinkState_e rxLinkState;
     bool boxFailsafeSwitchWasOn;
+    bool user1ProcedureEnabled;
+    bool user1HoldSelected;
 #if ENABLE_RESCUE_PLAN
     uint32_t autopilotEngageDeadline;       // grace window for core.c to engage a staged rescue mission
 #endif
@@ -107,6 +110,9 @@ void failsafeCheckDataFailurePeriod(void);
 failsafePhase_e failsafePhase(void);
 bool failsafeIsMonitoring(void);
 bool failsafeIsActive(void);
+bool failsafeUser1Selected(void);
+bool failsafeUser1ProcedureEnabled(void);
+bool failsafeUser1HoldSelected(void);
 bool failsafeIsReceivingRxData(void);
 void failsafeOnRxSuspend(uint32_t suspendPeriod);
 void failsafeOnRxResume(void);

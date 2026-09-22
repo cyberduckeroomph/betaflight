@@ -75,6 +75,21 @@
 
 const char rcChannelLetters[] = "AERT12345678abcdefgh";
 
+// Last actual receiver values, kept separately from rcData (which contains Stage 1 fallbacks).
+static uint16_t lastValidFlightChannels[NON_AUX_CHANNEL_COUNT] = { 1500, 1500, 1500, 1000 };
+#define FAILSAFE_FLIGHT_MODE_CHANNEL (NON_AUX_CHANNEL_COUNT + 1) // AUX2
+
+static uint16_t user1FailsafeValue(uint8_t channel)
+{
+    if (channel == FAILSAFE_FLIGHT_MODE_CHANNEL) {
+        return failsafeUser1HoldSelected() ? 2000 : 1500;
+    }
+    if (channel == THROTTLE && !failsafeUser1HoldSelected()) {
+        return failsafeConfig()->failsafe_throttle;
+    }
+    return lastValidFlightChannels[channel];
+}
+
 static uint16_t rssi = 0;                  // range: [0;1023]
 static uint16_t rssiRaw = 0;               // range: [0;1023]
 static timeUs_t lastRssiSmoothingUs = 0;
@@ -675,6 +690,13 @@ static uint16_t calculateChannelMovingAverage(uint8_t chan, uint16_t sample)
 
 static uint16_t getRxfailValue(uint8_t channel)
 {
+    // Only apply the USER1 custom fallback when the aircraft is already in the
+    // active failsafe path; otherwise the generic RX fail values would leak into
+    // normal armed operation and change throttle/axis handling while the link is still up.
+    if (failsafeUser1ProcedureEnabled() &&
+        (channel < NON_AUX_CHANNEL_COUNT || channel == FAILSAFE_FLIGHT_MODE_CHANNEL)) {
+        return user1FailsafeValue(channel);
+    }
     const rxFailsafeChannelConfig_t *channelFailsafeConfig = rxFailsafeChannelConfigs(channel);
     const bool boxFailsafeSwitchIsOn = IS_RC_MODE_ACTIVE(BOXFAILSAFE);
 
@@ -761,6 +783,9 @@ static void detectAndApplySignalLossBehaviour(void)
         if (thisChannelValid) {
             //  reset the invalid pulse period timer for every good channel
             validRxSignalTimeout[channel] = currentTimeMs + MAX_INVALID_PULSE_TIME_MS;
+            if (channel < NON_AUX_CHANNEL_COUNT && !failsafeIsActive()) {
+                lastValidFlightChannels[channel] = sample;
+            }
         }
 
         if (failsafeIsActive()) {
@@ -768,7 +793,9 @@ static void detectAndApplySignalLossBehaviour(void)
             // pass valid incoming flight channel values to FC,
             // so that GPS Rescue can get the 30% requirement for termination of the rescue
             if (channel < NON_AUX_CHANNEL_COUNT) {
-                if (!thisChannelValid) {
+            if (failsafeUser1ProcedureEnabled()) {
+                sample = user1FailsafeValue(channel);
+            } else if (!thisChannelValid) {
                     if (channel == THROTTLE ) {
                         sample = failsafeConfig()->failsafe_throttle;
                         // stage 2 failsafe throttle value. In GPS Rescue Flight mode, altitude control overrides, late in mixer.c
